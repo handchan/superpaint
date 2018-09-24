@@ -1,0 +1,266 @@
+import javax.swing.JPanel;
+import javax.swing.JLabel;
+import java.util.ArrayList;
+import java.awt.Color;
+import java.awt.Graphics;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+
+
+/*
+ * Name: Hengcheng Yu
+ * Date: 2017/04/27
+ * Desc: This class creates a draw panel to do the simple shapes
+. It also keeps track of mouse positions in the panel
+ *       and responds to mouse events
+ */
+
+// Class for draw panel
+public class DrawPanel extends JPanel{
+    private Color preColor = Color.RED;
+    private Color color = Color.BLACK;
+    private int shapeChoice;
+    private Shape currentShape = null;
+    private Rectangle preRect = null;
+    private int selectedShapeIndex = -1;
+    private DynamicStack<Shape> shapes;
+    private DynamicStack<Shape> undoShapes;
+    private DynamicStack<Shape> drawAction;
+    private JLabel statusBar;
+    private boolean filled = false;
+    
+    //This constructer takes 3 parameters, the shapes
+     // stack, the undoDrawing stack and the statusBar JLabel.
+    // It then sets up the mouse event listener and added to the panel
+    public DrawPanel (DynamicStack<Shape> shapes, DynamicStack<Shape> undoShapes, JLabel statusBar){
+        
+        this.shapes= shapes;
+        this.undoShapes = undoShapes;
+        this.statusBar = statusBar;
+        // A helper stack for drawing and selecting shape
+        drawAction = new DynamicStack<Shape>();
+        
+        // Create and register listener for mouse and mouse motion events
+        MouseEventListener drawPanelListener = new MouseEventListener(); 
+        addMouseListener( drawPanelListener ); 
+        addMouseMotionListener( drawPanelListener );
+    }
+    
+    // This mutator takes one integer parameter and assign it to shapeChoice instance variable
+    public void setChoice (int shapeChoice){
+        this.shapeChoice = shapeChoice;
+    }
+    
+    // This mutator takes one boolean parameter and assign it to filled instance variable
+    public void setFilled (boolean filled){
+        this.filled = filled;
+    }
+    
+    
+    // This mutator takes one Color parameter and assign it to color instance variable
+    public void setColor (Color color){
+        this.color = color;
+    }
+    
+    
+    // This mutator takes one integer parameter and assign it to selectedShapeIndex instance variable
+    public void setSelectedShapeIndex (int index){
+        selectedShapeIndex = index;
+        if (index == -1){
+            preRect = null;
+        }
+    }
+    
+    // This accessor returns a Color object represents color instance variable
+    public Color getColor(){
+        return color;
+    }
+    
+    // This accessor returns a integer value represents selectedShapeIndex instance variable
+    public int getSelectedShapeIndex(){
+        return selectedShapeIndex;
+    }
+    
+    
+    // This method is called automatically by the JVM when the window needs to be (re)drawn.
+    @Override
+    public void paintComponent( Graphics g ) {
+        super.paintComponent( g );
+        
+        // Call the draw() method for each Line object in the array
+        drawAll(g);
+        // If a shape is in progress, draw it on top of all others
+        if ( currentShape != null )
+            currentShape.draw( g );
+        
+        
+    }
+    
+    // Helper method for drawing all the shapes in a stack
+    // It takes a Graphics parameter and draw all the shapes, including the 
+    // pre rectangle when a shape is selected.
+    private void drawAll(Graphics g){
+        Shape figure;
+        int size = shapes.size();
+        for (int i = 0 ; i < size ; i++ ){
+            drawAction.push(shapes.pop());
+        }
+        // go through the shapes
+         //stack, pop it to the helper stack and
+        // draw all the shape while pushing them back
+        for (int i = 0 ; i < size ; i++ ){
+            figure = drawAction.pop();
+            // if user selected any shapes, draw a pre rectangle around it.
+            if (i == getSelectedShapeIndex()){
+                preRect = new Rectangle( figure.getX1()+1, figure.getY1()+1, figure.getX2()-1, figure.getY2()-1,preColor ,false );
+            }
+            figure.draw(g);
+            shapes.push(figure);
+        }
+    }
+    
+    
+    // Inner class to handle mouse events
+    class MouseEventListener extends MouseAdapter {
+        // This method will be called automatically whenever a mosue is pressed.
+        @Override
+        public void mousePressed( MouseEvent event ) {
+            // de-select the shape
+            setSelectedShapeIndex(-1);
+            // if user right clicked the mouse, draw a pre rectangle which it will not be added to the shapes
+
+            if (event.isMetaDown()){
+                // Do stuff only if user is not drawing anything
+                if (currentShape == null){
+                    preRect = new Rectangle( event.getX(), event.getY(), event.getX(), event.getY(), preColor,false );
+                }
+            }
+            // if user left clicked mouse, draw shape that user choose (line, rectangle, oval)
+            else{
+                // Do stuff only if preRect is null
+                if (preRect == null){
+                    if (shapeChoice == 0){
+                        
+                        currentShape = new Line( event.getX(), event.getY(), event.getX(), event.getY(), color);
+                    }
+                    else if (shapeChoice == 1){
+                        currentShape = new Oval( event.getX(), event.getY(), event.getX(), event.getY(), color,filled );
+                    }
+                    else {
+                        currentShape = new Rectangle( event.getX(), event.getY(), event.getX(), event.getY(), color,filled );
+                    }
+                }
+                // Tell JVM to call paintComponent( g )
+                repaint();
+            }
+        }
+        
+        // This method will be called automatically whenever a mosue is released.
+        @Override
+        public void mouseReleased( MouseEvent event ) {
+            // if user released the mouse after right-clicking, search the shapes
+             //stack for the shape that user has selected
+            if (event.isMetaDown()){
+                //Do nothing if there is no pre rectangle being drawn
+                if (preRect != null){
+                    Shape figure;
+                    int size = shapes.size();
+                    for (int i = 0 ; i < size ; i++){
+                        figure = shapes.pop();
+                        drawAction.push(figure);
+                        // selecting the shape by using the pre rectangle
+                        if (figure.isSelected(preRect.getUpperLeftX(), preRect.getUpperLeftY(), preRect.getLowerRightX(), preRect.getLowerRightX())){
+                            setSelectedShapeIndex(size-i-1);
+                            break;
+                        }
+                        // selecting the shape by just right-clicking
+                        else if (figure.isSelected(  (preRect.getLowerRightX() + preRect.getUpperLeftX())/2, (preRect.getLowerRightY()+preRect.getUpperLeftY())/2 )){
+                            setSelectedShapeIndex(size-i-1);
+                            break;
+                        }
+                    }
+                    size = drawAction.size();
+                    // push shapes back to shapes stack
+                    for (int i = 0 ; i < size ; i++){
+                        shapes.push(drawAction.pop());
+                    }
+                    preRect = null;
+                }
+            }
+            // if user released the mouse by left-clicking, finish the shape and push it to the stack
+            else{
+                //Do nothing if there is no current shape being drawn
+                if (currentShape != null){
+                    // Update ending coordinates
+                    currentShape.setX2( getFinalX(event) );
+                    currentShape.setY2( getFinalY(event) );
+                    
+                    // push shape into stack and clear undo stack
+                    shapes.push(currentShape);
+                    undoShapes.clear();
+                    
+                    // Get ready for the next shape to be drawn
+                    currentShape = null;   
+                    preRect = null;
+                }
+            }
+            // When using release the mouse, clear the pre rectangle
+            repaint();   
+        } 
+        
+        // This method will be called automatically whenever a mosue is dragged.
+        @Override
+        public void mouseDragged( MouseEvent event ) {
+            // While pressing the right button, as mouse is dragged, update ending coordinates of preRect
+            //Do nothing if there is no pre rectangle being drawn
+            if (preRect != null){
+                preRect.setX2( getFinalX(event));
+                preRect.setY2( getFinalY(event));
+            }
+            // While pressing the left button, as mouse is dragged, update ending coordinates of currentShape
+            // Do nothing if there is no current shape being drawn
+            else if (currentShape != null){
+                currentShape.setX2( getFinalX(event));
+                currentShape.setY2( getFinalY(event));
+            }
+            // update the statusBar 
+            statusBar.setText( String.format( "Mouse at (%d, %d)", getFinalX(event), getFinalY(event) ) );
+            repaint();
+        } 
+        
+        // This method will be called automatically whenever a mosue is moved.
+        @Override
+        public void mouseMoved( MouseEvent event ) {
+            // As mouse is moved, just update the statusBar
+            statusBar.setText( String.format( "Mouse at (%d, %d)", getFinalX(event), getFinalY(event) ) );
+        }
+        
+        //This helper method takes one MouseEvent parameter. It sets the X coordinate
+        //so that when mouse is outside the draw panel, return the X coordinate as if the mouse
+        // was at the boundary of the draw panel
+        private int getFinalX(MouseEvent event){
+            if (event.getX() <= 0){
+                return 0;
+            }
+            else if (event.getX() >= getWidth()){
+                return getWidth() - 1;
+            }
+            return event.getX();
+        }
+        
+        //This helper method takes one MouseEvent parameter. It sets the Y coordinate
+        //so that when mouse is outside the draw panel, return the Y coordinate as if the mouse
+        // was at the boundary of the draw panel
+        private int getFinalY(MouseEvent event){
+            if (event.getY() <= 0){
+                return 0;
+            }
+            else if (event.getY() >= getHeight()){
+                return getHeight() - 1;
+            }
+            return event.getY();
+        }
+        
+    }
+    
+}
